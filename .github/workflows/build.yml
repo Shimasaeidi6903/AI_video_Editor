@@ -74,9 +74,6 @@ jobs:
             "build-tools;35.0.0" \
             "ndk;27.2.12479018"
 
-          echo "Checking AIDL..."
-          "$ANDROID_SDK_ROOT/build-tools/35.0.0/aidl" --version
-
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip setuptools wheel
