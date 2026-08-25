@@ -33,3 +33,5 @@ android.archs = arm64-v8a
 android.accept_sdk_license = True
 
 android.permissions = READ_MEDIA_VIDEO,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+
+p4a.branch = develop
