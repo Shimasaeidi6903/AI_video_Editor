@@ -11,92 +11,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
+      - name: Build APK with Buildozer
+        uses: ArtemSBulgakov/buildozer-action@v1
+        id: buildozer
         with:
-          python-version: "3.11"
-
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            wget \
-            openjdk-17-jdk \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            cmake
-
-      - name: Install Buildozer
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install buildozer cython
-
-      - name: Prepare Android SDK for Buildozer
-        run: |
-          export BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          mkdir -p "$BUILDOZER_SDK/cmdline-tools"
-
-          cd /tmp
-
-          wget -q \
-            https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
-            -O commandlinetools.zip
-
-          unzip -q commandlinetools.zip
-
-          rm -rf "$BUILDOZER_SDK/cmdline-tools/latest"
-
-          mkdir -p "$BUILDOZER_SDK/cmdline-tools/latest"
-
-          mv cmdline-tools/* \
-            "$BUILDOZER_SDK/cmdline-tools/latest/"
-
-          export PATH="$BUILDOZER_SDK/cmdline-tools/latest/bin:$BUILDOZER_SDK/platform-tools:$PATH"
-
-          echo "ANDROID_HOME=$BUILDOZER_SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$BUILDOZER_SDK" >> "$GITHUB_ENV"
-
-          echo "$BUILDOZER_SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$BUILDOZER_SDK/platform-tools" >> "$GITHUB_PATH"
-
-          yes | sdkmanager --licenses || true
-
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "ndk;27.2.12479018"
-
-          echo "Android SDK contents:"
-          ls -la "$BUILDOZER_SDK"
-
-          echo "Build Tools:"
-          ls -la "$BUILDOZER_SDK/build-tools"
-
-          echo "AIDL:"
-          ls -la "$BUILDOZER_SDK/build-tools/35.0.0/aidl"
-
-      - name: Build APK
-        run: |
-          buildozer android debug
+          command: buildozer android debug
+          buildozer_version: stable
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: AI-Video-Editor
-          path: bin/*.apk
+          path: ${{ steps.buildozer.outputs.filename }}
