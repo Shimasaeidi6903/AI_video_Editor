@@ -64,17 +64,37 @@ jobs:
 
           mv cmdline-tools/* "$SDK/cmdline-tools/latest/"
 
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          # Buildozer expects the old tools/bin path
+          mkdir -p "$SDK/tools/bin"
+
+          ln -sf \
+            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            "$SDK/tools/bin/sdkmanager"
+
+          ln -sf \
+            "$SDK/cmdline-tools/latest/bin/avdmanager" \
+            "$SDK/tools/bin/avdmanager"
+
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/tools/bin:$PATH"
 
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
 
-          yes | sdkmanager --licenses || true
+          # Verify sdkmanager
+          "$SDK/tools/bin/sdkmanager" --version
 
-          sdkmanager \
+          # Accept Android SDK licenses
+          yes | "$SDK/tools/bin/sdkmanager" --licenses || true
+
+          # Install required Android SDK components
+          "$SDK/tools/bin/sdkmanager" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0" \
