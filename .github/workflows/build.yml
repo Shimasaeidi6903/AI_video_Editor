@@ -14,7 +14,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -25,29 +25,49 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             git \
             zip \
             unzip \
             wget \
+            curl \
             openjdk-17-jdk \
             autoconf \
             automake \
+            autopoint \
             libtool \
             libltdl-dev \
             pkg-config \
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            cmake
+            libtinfo6 \
+            libffi-dev \
+            libssl-dev \
+            cmake \
+            build-essential \
+            patch \
+            gettext \
+            lbzip2 \
+            ccache
 
-      - name: Install Buildozer
+      - name: Install Buildozer and build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install buildozer cython
+
+          python -m pip install \
+            git+https://github.com/kivy/buildozer.git
+
+          python -m pip install \
+            legacy-cgi \
+            setuptools \
+            "cython==0.29.34"
 
       - name: Prepare Android SDK
         run: |
+          set -e
+
           SDK="$HOME/.buildozer/android/platform/android-sdk"
 
           mkdir -p "$SDK/cmdline-tools"
@@ -64,7 +84,7 @@ jobs:
 
           mv cmdline-tools/* "$SDK/cmdline-tools/latest/"
 
-          # Buildozer expects the old tools/bin path
+          # Buildozer/p4a compatibility path
           mkdir -p "$SDK/tools/bin"
 
           ln -sf \
@@ -78,27 +98,53 @@ jobs:
           export ANDROID_HOME="$SDK"
           export ANDROID_SDK_ROOT="$SDK"
 
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$SDK/tools/bin:$PATH"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
 
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
           echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
           echo "$SDK/tools/bin" >> "$GITHUB_PATH"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
-          # Verify sdkmanager
+          echo "Checking sdkmanager..."
           "$SDK/tools/bin/sdkmanager" --version
 
-          # Accept Android SDK licenses
+          echo "Accepting Android SDK licenses..."
           yes | "$SDK/tools/bin/sdkmanager" --licenses || true
 
-          # Install required Android SDK components
+          echo "Installing Android SDK packages..."
+
           "$SDK/tools/bin/sdkmanager" \
             "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "ndk;27.2.12479018"
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;28.2.13676358"
+
+          echo "Android SDK packages installed."
+
+      - name: Verify build environment
+        run: |
+          echo "Python:"
+          python --version
+
+          echo "Pip:"
+          python -m pip --version
+
+          echo "Cython:"
+          cython --version
+
+          echo "Java:"
+          java -version
+
+          echo "Buildozer:"
+          buildozer --version
+
+          echo "Android SDK:"
+          echo "$ANDROID_HOME"
+
+          echo "Android NDK:"
+          ls -la "$ANDROID_HOME/ndk"
 
       - name: Build APK
         run: |
@@ -109,3 +155,4 @@ jobs:
         with:
           name: AI-Video-Editor
           path: bin/*.apk
+          if-no-files-found: error
