@@ -24,6 +24,8 @@ jobs:
 
       - name: Install system dependencies
         run: |
+          set -eux
+
           sudo apt-get update
 
           sudo apt-get install -y \
@@ -33,6 +35,7 @@ jobs:
             wget \
             curl \
             openjdk-17-jdk \
+            python3-venv \
             autoconf \
             automake \
             autopoint \
@@ -52,8 +55,23 @@ jobs:
             lbzip2 \
             ccache
 
-      - name: Install Buildozer and build dependencies
+      - name: Install Rust
         run: |
+          set -eux
+
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+          source "$HOME/.cargo/env"
+
+          rustc --version
+          cargo --version
+
+      - name: Install Buildozer
+        run: |
+          set -eux
+
           python -m pip install --upgrade pip
 
           python -m pip install \
@@ -64,15 +82,28 @@ jobs:
             setuptools \
             "cython==0.29.34"
 
+      - name: Clean previous Android build state
+        run: |
+          set -eux
+
+          rm -rf .buildozer
+          rm -rf bin
+
+          mkdir -p bin
+
       - name: Prepare Android SDK
         run: |
-          set -e
+          set -eux
 
           SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+          rm -rf "$SDK"
 
           mkdir -p "$SDK/cmdline-tools"
 
           cd /tmp
+
+          rm -rf cmdline-tools commandlinetools.zip
 
           wget -q \
             https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
@@ -84,7 +115,7 @@ jobs:
 
           mv cmdline-tools/* "$SDK/cmdline-tools/latest/"
 
-          # Buildozer/p4a compatibility path
+          # Compatibility paths required by older Buildozer/p4a code.
           mkdir -p "$SDK/tools/bin"
 
           ln -sf \
@@ -95,11 +126,6 @@ jobs:
             "$SDK/cmdline-tools/latest/bin/avdmanager" \
             "$SDK/tools/bin/avdmanager"
 
-          export ANDROID_HOME="$SDK"
-          export ANDROID_SDK_ROOT="$SDK"
-
-          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
-
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
@@ -107,13 +133,20 @@ jobs:
           echo "$SDK/tools/bin" >> "$GITHUB_PATH"
           echo "$SDK/platform-tools" >> "$GITHUB_PATH"
 
-          echo "Checking sdkmanager..."
+          export ANDROID_HOME="$SDK"
+          export ANDROID_SDK_ROOT="$SDK"
+
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/tools/bin:$SDK/platform-tools:$PATH"
+
+          echo "=== sdkmanager ==="
+
           "$SDK/tools/bin/sdkmanager" --version
 
-          echo "Accepting Android SDK licenses..."
-          yes | "$SDK/tools/bin/sdkmanager" --licenses || true
+          echo "=== accepting licenses ==="
 
-          echo "Installing Android SDK packages..."
+          yes | "$SDK/tools/bin/sdkmanager" --licenses >/dev/null || true
+
+          echo "=== installing Android packages ==="
 
           "$SDK/tools/bin/sdkmanager" \
             "platform-tools" \
@@ -121,38 +154,96 @@ jobs:
             "build-tools;36.0.0" \
             "ndk;28.2.13676358"
 
-          echo "Android SDK packages installed."
+          echo "=== installed packages ==="
 
-      - name: Verify build environment
+          "$SDK/tools/bin/sdkmanager" --list_installed
+
+      - name: Verify Android tools
         run: |
-          echo "Python:"
+          set -eux
+
+          SDK="$ANDROID_HOME"
+
+          echo "=== SDK ==="
+          test -d "$SDK"
+
+          echo "=== platform ==="
+          test -d "$SDK/platforms/android-36"
+
+          echo "=== build-tools ==="
+          test -d "$SDK/build-tools/36.0.0"
+
+          echo "=== AIDL ==="
+          test -x "$SDK/build-tools/36.0.0/aidl"
+          "$SDK/build-tools/36.0.0/aidl" --version
+
+          echo "=== NDK ==="
+          test -d "$SDK/ndk/28.2.13676358"
+
+          echo "=== sdkmanager compatibility path ==="
+          test -x "$SDK/tools/bin/sdkmanager"
+
+          "$SDK/tools/bin/sdkmanager" --version
+
+          echo "Android toolchain verification: PASSED"
+
+      - name: Verify project configuration
+        run: |
+          set -eux
+
+          echo "=== buildozer.spec ==="
+          cat buildozer.spec
+
+          echo "=== architecture check ==="
+
+          grep -E '^android\.archs[[:space:]]*=' buildozer.spec
+
+          if grep -q "armeabi-v7a" buildozer.spec; then
+            echo "ERROR: obsolete armeabi-v7a configuration detected."
+            exit 1
+          fi
+
+          echo "Architecture configuration: arm64-v8a only"
+
+      - name: Verify Python build environment
+        run: |
+          set -eux
+
+          echo "=== Python ==="
           python --version
 
-          echo "Pip:"
+          echo "=== pip ==="
           python -m pip --version
 
-          echo "Cython:"
+          echo "=== Cython ==="
           cython --version
 
-          echo "Java:"
+          echo "=== Java ==="
           java -version
 
-          echo "Buildozer:"
+          echo "=== Buildozer ==="
           buildozer --version
-
-          echo "Android SDK:"
-          echo "$ANDROID_HOME"
-
-          echo "Android NDK:"
-          ls -la "$ANDROID_HOME/ndk"
 
       - name: Build APK
         run: |
-          buildozer android debug
+          set -o pipefail
+
+          buildozer android debug 2>&1 | tee build.log
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: AI-Video-Editor
           path: bin/*.apk
           if-no-files-found: error
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Video-Editor-Build-Log
+          path: |
+            build.log
+            .buildozer/android/platform/python-for-android/**/*.log
+          if-no-files-found: warn
